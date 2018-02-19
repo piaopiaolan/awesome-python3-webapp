@@ -12,7 +12,7 @@ import markdown2
 from aiohttp import web
 
 from coroweb import get, post
-from apis import APIValueError, APIResourceNotFoundError, APIError
+from apis import APIValueError, APIResourceNotFoundError, APIError,Page
 
 from models import User, Comment, Blog, next_id
 from config import configs
@@ -23,6 +23,16 @@ _COOKIE_KEY = configs.session.secret
 def check_admin(request):
 	if request.__user__ is None or not request.__user__.admin:
 		raise APIPermissionError()
+
+@get('/api/blogs')
+async def api_blogs(*, page='1'):
+    page_index = get_page_index(page)
+    num = await Blog.findNumber('count(id)')
+    p = Page(num, page_index)
+    if num == 0:
+        return dict(page=p, blogs=())
+    blogs = await Blog.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    return dict(page=p, blogs=blogs)
 
 @post('/api/blogs')
 async def api_create_blog(request, *, name, summary, content):
@@ -45,6 +55,7 @@ def manage_create_blog(request):
         'action': '/api/blogs',
         '__user__': request.__user__
     }
+
 def get_page_index(page_str):
     p = 1
     try:
@@ -54,6 +65,15 @@ def get_page_index(page_str):
     if p < 1:
         p = 1
     return p
+
+@get('/manage/blogs')
+def manage_blogs(request,*, page='1'):
+    return {
+        '__template__': 'manage_blogs.html',
+        'page_index': get_page_index(page),
+         '__user__': request.__user__
+    }
+
 @get('/api/blogs/{id}')
 async def api_get_blog(*, id):
     blog = await Blog.find(id)
